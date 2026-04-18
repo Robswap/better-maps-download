@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Export high-resolution maps from OpenStreetMap and satellite imagery. Free, open-source, runs entirely in your browser.">
+<title>Map Export — High-resolution map downloads</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E🗺%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg:        #fafafa;
+    --surface:   #ffffff;
+    --surface-2: #f5f5f7;
+    --border:    #e5e5ea;
+    --border-2:  #d1d1d6;
+    --text:      #0a0a0a;
+    --text-2:    #525252;
+    --text-3:    #8e8e93;
+    --accent:    #4f46e5;
+    --accent-h:  #4338ca;
+    --accent-bg: #eef2ff;
+    --success:   #10b981;
+    --warning:   #f59e0b;
+    --danger:    #ef4444;
+    --radius:    10px;
+    --radius-sm: 7px;
+    --shadow:    0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,.08), 0 12px 40px rgba(0,0,0,.06);
+    --header-h:  56px;
+  }
+  [data-theme="dark"] {
+    --bg:        #0b0b0f;
+    --surface:   #17171c;
+    --surface-2: #1f1f26;
+    --border:    #2a2a32;
+    --border-2:  #3a3a44;
+    --text:      #f5f5f7;
+    --text-2:    #c2c2c8;
+    --text-3:    #7a7a82;
+    --accent:    #7c75ff;
+    --accent-h:  #6b64f0;
+    --accent-bg: #1e1a3e;
+    --shadow:    0 1px 2px rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.2);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,.4), 0 12px 40px rgba(0,0,0,.3);
+  }
+  [data-theme="dark"] input[type="range"]::-webkit-slider-thumb {
+    border-color: var(--surface);
+  }
+  [data-theme="dark"] .stat.warn { background: #3d2f0e; }
+  [data-theme="dark"] .stat.warn .k { color: #fcd34d; }
+  [data-theme="dark"] .stat.danger { background: #3d1515; }
+  [data-theme="dark"] .stat.danger .k { color: #fca5a5; }
+  [data-theme="dark"] select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  }
+  /* Subtle filter on map tiles in dark mode for better visual cohesion */
+  [data-theme="dark"] .leaflet-tile-pane { filter: brightness(0.88) contrast(1.05); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── App layout ─────────────────────────────────────────── */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  header.header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; z-index: 50;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo { font-size: 22px; }
+  .brand h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand .sub { font-size: 12px; color: var(--text-3); font-weight: 500; }
+
+  .header-actions { display: flex; align-items: center; gap: 8px; }
+
+  .workspace { flex: 1; display: flex; overflow: hidden; }
+  .map-wrap { flex: 1; position: relative; min-width: 0; }
+  #map { width: 100%; height: 100%; background: #e8e8ed; }
+
+  /* Search overlay on top of map */
+  .search-overlay {
+    position: absolute; top: 12px; left: 12px; right: 12px;
+    z-index: 400;
+    display: flex; gap: 8px; align-items: center;
+    max-width: 720px;
+  }
+  .search-box {
+    flex: 1;
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    padding: 4px;
+  }
+  .search-box svg { margin-left: 8px; color: var(--text-3); flex-shrink: 0; }
+  .search-box input {
+    flex: 1; border: none; outline: none; background: transparent;
+    padding: 8px 10px; font-size: 14px; font-family: inherit;
+    color: var(--text);
+  }
+  .search-box button {
+    padding: 7px 14px; border: none; border-radius: var(--radius-sm);
+    background: var(--accent); color: white; cursor: pointer;
+    font-weight: 600; font-size: 13px; font-family: inherit;
+    transition: background .12s;
+  }
+  .search-box button:hover { background: var(--accent-h); }
+
+  .style-dropdown {
+    background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); padding: 4px;
+  }
+  .style-dropdown select {
+    border: none; outline: none; background: transparent;
+    padding: 8px 10px; font-size: 13px; font-family: inherit;
+    cursor: pointer; color: var(--text);
+    appearance: none;
+    padding-right: 28px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+
+  /* Geocode result floating under search */
+  .geocode-result {
+    position: absolute; top: 64px; left: 12px;
+    background: var(--surface);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    font-size: 12px;
+    color: var(--text-2);
+    z-index: 400;
+    max-width: 600px;
+    display: none;
+  }
+  .geocode-result.visible { display: block; }
+
+  /* ── Sidebar ───────────────────────────────────────────── */
+  aside.sidebar {
+    width: 340px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .panel {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 18px;
+  }
+  .panel:last-child { border-bottom: none; }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .field { margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+    margin-bottom: 4px;
+  }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  input[type="text"], input[type="number"], select, input[type="file"] {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-bg);
+  }
+  input[type="number"] { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  select {
+    appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23666' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    cursor: pointer;
+  }
+
+  /* Slider */
+  .slider-field label {
+    display: flex; justify-content: space-between;
+  }
+  .slider-field label span:last-child {
+    font-family: ui-monospace, monospace;
+    color: var(--text);
+    font-weight: 600;
+  }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    background: var(--accent); border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2);
+    cursor: pointer;
+    transition: transform .1s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px;
+    background: var(--accent); border-radius: 50%;
+    border: 2px solid white;
+    cursor: pointer;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid var(--border-2);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: all .12s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--text-3); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent); color: white; border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-h); border-color: var(--accent-h); }
+  .btn.primary:disabled { background: var(--text-3); border-color: var(--text-3); }
+  .btn.ghost {
+    border: none; background: transparent; padding: 6px 10px;
+  }
+  .btn.ghost:hover { background: var(--surface-2); }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .btn.full { width: 100%; }
+
+  .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* Language toggle */
+  .lang-toggle {
+    display: flex; background: var(--surface-2);
+    border-radius: var(--radius-sm); padding: 2px;
+  }
+  .lang-toggle button {
+    padding: 4px 10px; border: none; background: transparent;
+    border-radius: 5px; cursor: pointer; font-size: 12px; font-weight: 600;
+    color: var(--text-3); font-family: inherit;
+    transition: all .12s;
+  }
+  .lang-toggle button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+  /* Theme toggle — shows sun icon in light mode, moon in dark mode */
+  .theme-toggle { padding: 6px 8px; }
+  .theme-toggle .icon-moon { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+  [data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+
+  /* Stats grid */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .stat {
+    background: var(--surface-2);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+  }
+  .stat .k { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .stat .v { font-size: 13px; font-weight: 600; font-family: ui-monospace, monospace; margin-top: 1px; }
+  .stat.warn { background: #fef3c7; }
+  .stat.warn .k { color: #92400e; }
+  .stat.danger { background: #fee2e2; }
+  .stat.danger .k { color: #991b1b; }
+
+  /* Progress */
+  .progress-wrap {
+    margin-top: 10px; height: 6px; background: var(--border);
+    border-radius: 3px; overflow: hidden; display: none;
+  }
+  .progress-bar {
+    height: 100%; background: var(--accent);
+    width: 0%; transition: width .2s;
+  }
+
+  /* Status line */
+  #status {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 10px;
+    min-height: 18px;
+  }
+  #status.working { color: var(--warning); }
+  #status.done    { color: var(--success); }
+  #status.error   { color: var(--danger); }
+
+  #disable-reason {
+    font-size: 12px; color: var(--danger); margin-top: 8px; display: none;
+  }
+
+  /* Corner pin for overlay */
+  .corner-pin {
+    background: #f59e0b;
+    border: 2px solid white;
+    border-radius: 50%;
+    width: 18px !important; height: 18px !important;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, .4), 0 2px 4px rgba(0,0,0,.3);
+  }
+  .corner-pin:hover { background: #fbbf24; }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; pointer-events: none;
+    display: flex; flex-direction: column-reverse; gap: 8px;
+  }
+  .toast {
+    background: var(--surface);
+    padding: 12px 18px; border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    font-size: 13px; font-weight: 500;
+    min-width: 280px; max-width: 480px;
+    pointer-events: auto;
+    display: flex; align-items: center; gap: 10px;
+    animation: toast-in .25s ease-out;
+    border-left: 3px solid var(--text-3);
+  }
+  .toast.success { border-left-color: var(--success); }
+  .toast.error   { border-left-color: var(--danger); }
+  .toast.warning { border-left-color: var(--warning); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Attribution */
+  .maplibregl-ctrl-attrib, .leaflet-control-attribution {
+    font-size: 10px !important;
+  }
+
+  /* Responsive */
+  @media (max-width: 880px) {
+    aside.sidebar { width: 100%; position: absolute; right: 0; top: var(--header-h); bottom: 0; z-index: 500; transform: translateX(100%); transition: transform .25s; }
+    aside.sidebar.open { transform: translateX(0); box-shadow: -4px 0 20px rgba(0,0,0,.1); }
+    .mobile-sidebar-toggle { display: flex; }
+  }
+  .mobile-sidebar-toggle { display: none; }
+
+  /* Accessibility */
+  *:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  button:focus-visible { outline-offset: 2px; }
+
+  /* Helper: hidden but accessible */
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <span class="logo">🗺</span>
+      <h1 data-i18n="app.title">Map Export</h1>
+      <span class="sub" data-i18n="app.subtitle">· High-res map downloads</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn ghost small theme-toggle" id="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark theme">
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <div class="lang-toggle" role="group" aria-label="Language">
+        <button data-lang="de">DE</button>
+        <button data-lang="en" class="active">EN</button>
+      </div>
+      <button class="btn ghost small mobile-sidebar-toggle" id="toggle-sidebar" aria-label="Toggle settings">
+        ⚙
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="workspace">
+
+    <!-- Map -->
+    <div class="map-wrap">
+      <div class="search-overlay">
+        <div class="search-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="search" id="q" data-i18n-placeholder="search.placeholder" placeholder="Search city or address…" autocomplete="off">
+          <button id="search-btn" data-i18n="search.button">Search</button>
+        </div>
+      </div>
+      <div class="geocode-result" id="geocode-result"></div>
+      <div id="map"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+
+      <!-- Map style -->
+      <section class="panel">
+        <h2 class="panel-title" data-i18n="panel.style">Map style</h2>
+        <div class="field">
+          <select id="tile-source" aria-label="Map style">
+            <optgroup label="Streets" data-i18n-label="style.group.streets">
+              <option value="osm">🗺 OpenStreetMap</option>
+              <option value="osm-de">🗺 OpenStreetMap (DE)</option>
+              <option value="carto-light">🗺 Carto Positron (light)</option>
+              <option value="carto-dark">🗺 Carto Dark Matter</option>
+            </optgroup>
+            <optgroup label="Topographic" data-i18n-label="style.group.topo">
+              <option value="opentopo">⛰ OpenTopoMap</option>
+            </optgroup>
+            <optgroup label="Satellite" data-i18n-label="style.group.satellite">
+              <option value="esri-sat">🛰 Esri World Imagery</option>
+              <option value="esri-sat-labels">🛰 Esri Satellite + Labels</option>
+            </optgroup>
+          </select>
+        </div>
+      </section>
+
+      <!-- Export settings -->
+      <section class="panel">
+        <h2 class="panel-title" data-i18n="panel.export">Export</h2>
+
+        <div class="field">
+          <label data-i18n="field.aspect">Aspect ratio</label>
+          <select id="aspect-ratio">
+            <optgroup label="ISO A series" data-i18n-label="aspect.iso">
+              <option value="a2-landscape">A2 landscape (594×420)</option>
+              <option value="a2-portrait">A2 portrait (420×594)</option>
+              <option value="a3-landscape" selected>A3 landscape (420×297)</option>
+              <option value="a3-portrait">A3 portrait (297×420)</option>
+              <option value="a4-landscape">A4 landscape (297×210)</option>
+              <option value="a4-portrait">A4 portrait (210×297)</option>
+              <option value="a5-landscape">A5 landscape (210×148)</option>
+              <option value="a5-portrait">A5 portrait (148×210)</option>
+            </optgroup>
+            <optgroup label="US sizes" data-i18n-label="aspect.us">
+              <option value="letter-landscape">Letter landscape (11×8.5")</option>
+              <option value="letter-portrait">Letter portrait (8.5×11")</option>
+              <option value="legal-landscape">Legal landscape (14×8.5")</option>
+              <option value="tabloid-landscape">Tabloid landscape (17×11")</option>
+            </optgroup>
+            <optgroup label="Screen / Other" data-i18n-label="aspect.screen">
+              <option value="16-9">16:9 (Widescreen)</option>
+              <option value="4-3">4:3 (Classic)</option>
+              <option value="1-1">1:1 (Square)</option>
+              <option value="free" data-i18n="aspect.free">Free (fit to view)</option>
+              <option value="from-ref" id="from-ref-option" disabled data-i18n="aspect.fromRef">From reference (not loaded)</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label data-i18n="field.zoom">Detail (zoom)</label>
+            <select id="export-zoom">
+              <option value="13">13 · Region</option>
+              <option value="14">14 · City</option>
+              <option value="15">15 · District</option>
+              <option value="16">16 · Block</option>
+              <option value="17" selected>17 · Street</option>
+              <option value="18">18 · Building</option>
+              <option value="19">19 · Max detail</option>
+            </select>
+          </div>
+          <div class="field">
+            <label data-i18n="field.dpi">DPI</label>
+            <select id="dpi">
+              <option value="72">72 · Screen</option>
+              <option value="150">150 · Draft</option>
+              <option value="300" selected>300 · Print</option>
+              <option value="600">600 · High</option>
+              <option value="1200">1200 · Pro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label data-i18n="field.format">File format</label>
+          <select id="export-format">
+            <option value="pdf" selected>PDF</option>
+            <option value="png">PNG (lossless)</option>
+            <option value="jpeg-95">JPEG 95% (high)</option>
+            <option value="jpeg-85">JPEG 85% (small)</option>
+            <option value="webp-95">WebP 95% (high)</option>
+            <option value="webp-85">WebP 85% (small)</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label data-i18n="field.filename">File name</label>
+            <input type="text" id="name-city" data-i18n-placeholder="field.filename.placeholder" placeholder="my-map">
+          </div>
+          <div class="field">
+            <label data-i18n="field.year">Year</label>
+            <input type="number" id="name-year" value="2026" min="1900" max="2100">
+          </div>
+        </div>
+
+        <button class="btn primary full" id="export-btn" data-i18n="button.export">Export</button>
+        <div id="status"></div>
+        <div id="disable-reason"></div>
+        <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <!-- Selection -->
+      <section class="panel">
+        <h2 class="panel-title" data-i18n="panel.selection">Selection area</h2>
+
+        <div class="field slider-field">
+          <label><span data-i18n="field.size">Size</span><span id="sel-size-val">80%</span></label>
+          <input type="range" id="sel-size" min="5" max="100" value="80">
+        </div>
+        <div class="field slider-field">
+          <label><span data-i18n="field.offsetX">X offset</span><span id="sel-offset-x-val">0%</span></label>
+          <input type="range" id="sel-offset-x" min="-45" max="45" value="0">
+        </div>
+        <div class="field slider-field">
+          <label><span data-i18n="field.offsetY">Y offset</span><span id="sel-offset-y-val">0%</span></label>
+          <input type="range" id="sel-offset-y" min="-45" max="45" value="0">
+        </div>
+      </section>
+
+      <!-- Reference overlay -->
+      <section class="panel">
+        <h2 class="panel-title" data-i18n="panel.reference">Reference overlay</h2>
+
+        <div class="field">
+          <label class="btn full" for="overlay-file" style="cursor:pointer;" id="overlay-file-label">
+            <span>📎</span>
+            <span data-i18n="overlay.load">Load image or PDF</span>
+          </label>
+          <input type="file" id="overlay-file" accept="image/*,.pdf,.svg,.webp,.avif,.gif,.bmp,.tiff,.tif" style="display:none;">
+          <div id="overlay-filename" style="font-size:11px;color:var(--text-3);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        </div>
+
+        <div class="field slider-field">
+          <label><span data-i18n="overlay.opacity">Opacity</span><span id="opacity-val">60%</span></label>
+          <input type="range" id="opacity-slider" min="0" max="100" value="60">
+        </div>
+
+        <div class="btn-group">
+          <button class="btn small" id="overlay-fit-btn" disabled data-i18n="overlay.fit">Fit to selection</button>
+          <button class="btn small" id="overlay-remove-btn" disabled data-i18n="overlay.remove">Remove</button>
+        </div>
+
+        <div style="font-size:11px; color:var(--text-3); margin-top:10px;" data-i18n="overlay.hint">
+          Drag the orange corner pins to align the reference.
+        </div>
+      </section>
+
+    </aside>
+  </div>
+
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── Theme (light/dark) ──────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+}
+(function initTheme() {
+  const saved = localStorage.getItem('theme');
+  const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(saved || (systemDark ? 'dark' : 'light'));
+})();
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const curr = document.documentElement.getAttribute('data-theme') || 'light';
+  applyTheme(curr === 'dark' ? 'light' : 'dark');
+});
+
+// ── i18n ────────────────────────────────────────────────────
+const I18N = {
+  en: {
+    'app.title': 'Map Export',
+    'app.subtitle': '· High-res map downloads',
+    'search.placeholder': 'Search city or address…',
+    'search.button': 'Search',
+    'style.group.streets': 'Streets',
+    'style.group.topo': 'Topographic',
+    'style.group.satellite': 'Satellite',
+    'panel.style': 'Map style',
+    'panel.export': 'Export',
+    'panel.selection': 'Selection area',
+    'panel.reference': 'Reference overlay',
+    'field.aspect': 'Aspect ratio',
+    'aspect.iso': 'ISO A series',
+    'aspect.us': 'US sizes',
+    'aspect.screen': 'Screen / Other',
+    'aspect.free': 'Free (fit to view)',
+    'aspect.fromRef': 'From reference (not loaded)',
+    'aspect.fromRefLoaded': 'From reference',
+    'field.zoom': 'Detail (zoom)',
+    'field.dpi': 'DPI',
+    'field.format': 'File format',
+    'field.filename': 'File name',
+    'field.filename.placeholder': 'my-map',
+    'field.year': 'Year',
+    'field.size': 'Size',
+    'field.offsetX': 'X offset',
+    'field.offsetY': 'Y offset',
+    'button.export': 'Export',
+    'overlay.load': 'Load image or PDF',
+    'overlay.opacity': 'Opacity',
+    'overlay.fit': 'Fit to selection',
+    'overlay.remove': 'Remove',
+    'overlay.hint': 'Drag the orange corner pins to align the reference.',
+    'overlay.rendering': 'Rendering PDF…',
+    'overlay.loaded': 'Loaded',
+    'overlay.fitted': 'Reference fitted to selection area',
+    'stats.tiles': 'Tiles',
+    'stats.size': 'Output size',
+    'stats.paper': 'Paper size',
+    'stats.time': 'Est. time',
+    'status.ready': '',
+    'status.searching': 'Searching…',
+    'status.searchFail': 'Not found',
+    'status.loadingTiles': 'Loading tiles',
+    'status.encodingImage': 'Encoding image…',
+    'status.creatingPDF': 'Creating PDF…',
+    'status.done': 'Done',
+    'status.failed': 'Failed',
+    'status.tooManyTiles': 'Too many tiles – reduce zoom or area.',
+    'status.canvasTooLarge': 'Output too large for browser canvas.',
+    'status.tileFail': 'tiles failed',
+    'toast.exportDone': 'Map exported successfully',
+    'toast.exportFail': 'Export failed: ',
+    'tiles': 'tiles'
+  },
+  de: {
+    'app.title': 'Karten-Export',
+    'app.subtitle': '· Hochauflösende Karten',
+    'search.placeholder': 'Stadt oder Adresse suchen…',
+    'search.button': 'Suchen',
+    'style.group.streets': 'Straßen',
+    'style.group.topo': 'Topografisch',
+    'style.group.satellite': 'Satellit',
+    'panel.style': 'Karten-Stil',
+    'panel.export': 'Export',
+    'panel.selection': 'Auswahl-Bereich',
+    'panel.reference': 'Referenzkarte',
+    'field.aspect': 'Seitenverhältnis',
+    'aspect.iso': 'ISO A-Serie',
+    'aspect.us': 'US-Formate',
+    'aspect.screen': 'Bildschirm / Andere',
+    'aspect.free': 'Frei (an Ansicht anpassen)',
+    'aspect.fromRef': 'Von Referenz (nicht geladen)',
+    'aspect.fromRefLoaded': 'Von Referenz',
+    'field.zoom': 'Detail (Zoom)',
+    'field.dpi': 'DPI',
+    'field.format': 'Dateiformat',
+    'field.filename': 'Dateiname',
+    'field.filename.placeholder': 'meine-karte',
+    'field.year': 'Jahr',
+    'field.size': 'Größe',
+    'field.offsetX': 'X-Versatz',
+    'field.offsetY': 'Y-Versatz',
+    'button.export': 'Exportieren',
+    'overlay.load': 'Bild oder PDF laden',
+    'overlay.opacity': 'Transparenz',
+    'overlay.fit': 'An Auswahl anpassen',
+    'overlay.remove': 'Entfernen',
+    'overlay.hint': 'Ziehe die orangenen Eck-Pins zum Ausrichten der Referenz.',
+    'overlay.rendering': 'Rendere PDF…',
+    'overlay.loaded': 'Geladen',
+    'overlay.fitted': 'Referenz an Auswahl angepasst',
+    'stats.tiles': 'Tiles',
+    'stats.size': 'Ausgabegröße',
+    'stats.paper': 'Papiergröße',
+    'stats.time': 'Geschätzte Dauer',
+    'status.ready': '',
+    'status.searching': 'Suche…',
+    'status.searchFail': 'Nicht gefunden',
+    'status.loadingTiles': 'Lade Tiles',
+    'status.encodingImage': 'Kodiere Bild…',
+    'status.creatingPDF': 'Erzeuge PDF…',
+    'status.done': 'Fertig',
+    'status.failed': 'Fehler',
+    'status.tooManyTiles': 'Zu viele Tiles – Zoom reduzieren oder Bereich verkleinern.',
+    'status.canvasTooLarge': 'Ausgabe zu groß für Browser-Canvas.',
+    'status.tileFail': 'Tiles fehlgeschlagen',
+    'toast.exportDone': 'Karte erfolgreich exportiert',
+    'toast.exportFail': 'Export fehlgeschlagen: ',
+    'tiles': 'Tiles'
+  }
+};
+let lang = localStorage.getItem('lang') || (navigator.language?.startsWith('de') ? 'de' : 'en');
+function t(key) { return I18N[lang][key] ?? key; }
+function applyI18n() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = t(el.dataset.i18nPlaceholder));
+  document.querySelectorAll('[data-i18n-label]').forEach(el => el.label = t(el.dataset.i18nLabel));
+  document.querySelectorAll('.lang-toggle button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  updateStats(); // refresh dynamic labels
+}
+document.querySelectorAll('.lang-toggle button').forEach(b => {
+  b.addEventListener('click', () => {
+    lang = b.dataset.lang;
+    localStorage.setItem('lang', lang);
+    applyI18n();
+  });
+});
+
+// ── Toast helper ─────────────────────────────────────────────
+function toast(msg, type = 'success', duration = 3500) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity .25s, transform .25s';
+    el.style.opacity = '0'; el.style.transform = 'translateY(8px)';
+    setTimeout(() => el.remove(), 250);
+  }, duration);
+}
+
+// ── Tile sources ─────────────────────────────────────────────
+const TILE_SOURCES = {
+  'osm':             { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attribution: '© OpenStreetMap contributors' },
+  'osm-de':          { url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',  maxZoom: 18, attribution: '© OpenStreetMap contributors · openstreetmap.de' },
+  'carto-light':     { url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', maxZoom: 19, attribution: '© OpenStreetMap contributors · © CARTO' },
+  'carto-dark':      { url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png',  maxZoom: 19, attribution: '© OpenStreetMap contributors · © CARTO' },
+  'opentopo':        { url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png', maxZoom: 17, attribution: '© OpenStreetMap contributors · © OpenTopoMap (CC-BY-SA)' },
+  'esri-sat':        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, attribution: 'Tiles © Esri · Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community' },
+  'esri-sat-labels': { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlayUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, attribution: 'Tiles © Esri · Labels © Esri' }
+};
+
+// ── Tile math ───────────────────────────────────────────────
+const lonToTileX = (lon, z) => (lon + 180) / 360 * Math.pow(2, z);
+const latToTileY = (lat, z) => {
+  const r = lat * Math.PI / 180;
+  return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
+};
+const tileXToLon = (x, z) => x / Math.pow(2, z) * 360 - 180;
+const tileYToLat = (y, z) => {
+  const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z);
+  return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+};
+function computeTileRange(bounds, zoom) {
+  const xMin = Math.floor(lonToTileX(bounds.getWest(), zoom));
+  const xMax = Math.floor(lonToTileX(bounds.getEast(), zoom));
+  const yMin = Math.floor(latToTileY(bounds.getNorth(), zoom));
+  const yMax = Math.floor(latToTileY(bounds.getSouth(), zoom));
+  return { xMin, xMax, yMin, yMax, cols: xMax - xMin + 1, rows: yMax - yMin + 1, count: (xMax - xMin + 1) * (yMax - yMin + 1) };
+}
+
+// ── Aspect ratios ───────────────────────────────────────────
+const ASPECT_RATIOS = {
+  'a2-landscape': 594/420, 'a2-portrait': 420/594,
+  'a3-landscape': 420/297, 'a3-portrait': 297/420,
+  'a4-landscape': 297/210, 'a4-portrait': 210/297,
+  'a5-landscape': 210/148, 'a5-portrait': 148/210,
+  'letter-landscape': 11/8.5, 'letter-portrait': 8.5/11,
+  'legal-landscape': 14/8.5,
+  'tabloid-landscape': 17/11,
+  '16-9': 16/9, '4-3': 4/3, '1-1': 1,
+  'free': null, 'from-ref': null
+};
+
+function fitAspectRatio(viewBounds, targetRatio, sizeScale = 0.8, offsetXFrac = 0, offsetYFrac = 0) {
+  const z = 14;
+  const xW = lonToTileX(viewBounds.getWest(), z);
+  const xE = lonToTileX(viewBounds.getEast(), z);
+  const yN = latToTileY(viewBounds.getNorth(), z);
+  const yS = latToTileY(viewBounds.getSouth(), z);
+  const xMin = Math.min(xW, xE), xMax = Math.max(xW, xE);
+  const yMin = Math.min(yN, yS), yMax = Math.max(yN, yS);
+  const viewXRange = xMax - xMin, viewYRange = yMax - yMin;
+
+  if (!targetRatio) {
+    const xRange = viewXRange * sizeScale, yRange = viewYRange * sizeScale;
+    const xC = (xMin + xMax) / 2 + offsetXFrac * viewXRange;
+    const yC = (yMin + yMax) / 2 + offsetYFrac * viewYRange;
+    return L.latLngBounds(
+      [tileYToLat(yC + yRange/2, z), tileXToLon(xC - xRange/2, z)],
+      [tileYToLat(yC - yRange/2, z), tileXToLon(xC + xRange/2, z)]
+    );
+  }
+
+  let xRange = viewXRange, yRange = viewYRange;
+  if (xRange / yRange > targetRatio) xRange = yRange * targetRatio;
+  else yRange = xRange / targetRatio;
+  xRange *= sizeScale; yRange *= sizeScale;
+
+  const maxOffX = (viewXRange - xRange) / 2;
+  const maxOffY = (viewYRange - yRange) / 2;
+  const xC = (xMin + xMax) / 2 + Math.max(-maxOffX, Math.min(maxOffX, offsetXFrac * viewXRange));
+  const yC = (yMin + yMax) / 2 + Math.max(-maxOffY, Math.min(maxOffY, offsetYFrac * viewYRange));
+
+  return L.latLngBounds(
+    [tileYToLat(yC + yRange/2, z), tileXToLon(xC - xRange/2, z)],
+    [tileYToLat(yC - yRange/2, z), tileXToLon(xC + xRange/2, z)]
+  );
+}
+
+// ── Map ─────────────────────────────────────────────────────
+let map, baseLayer, overlayLayer, selectionRect;
+let currentSourceKey = 'osm';
+
+function setTileSource(key) {
+  currentSourceKey = key;
+  const src = TILE_SOURCES[key];
+  if (baseLayer) map.removeLayer(baseLayer);
+  if (overlayLayer) { map.removeLayer(overlayLayer); overlayLayer = null; }
+
+  baseLayer = L.tileLayer(src.url, { maxZoom: src.maxZoom, maxNativeZoom: src.maxZoom, attribution: src.attribution, crossOrigin: 'anonymous' }).addTo(map);
+  if (src.overlayUrl) {
+    overlayLayer = L.tileLayer(src.overlayUrl, { maxZoom: src.maxZoom, maxNativeZoom: src.maxZoom, crossOrigin: 'anonymous' }).addTo(map);
+  }
+
+  const zoomSel = document.getElementById('export-zoom');
+  for (const opt of zoomSel.options) opt.disabled = parseInt(opt.value) > src.maxZoom;
+  if (parseInt(zoomSel.value) > src.maxZoom) zoomSel.value = src.maxZoom;
+  updateStats();
+}
+
+function initMap() {
+  // Default: Berlin (Brandenburg Gate area)
+  map = L.map('map', { center: [52.5186, 13.3762], zoom: 13, zoomControl: true });
+  map.zoomControl.setPosition('bottomright');
+
+  selectionRect = L.rectangle(map.getBounds(), {
+    color: '#4f46e5', weight: 2, fillOpacity: 0.04, fillColor: '#4f46e5', interactive: false,
+    dashArray: '6,4'
+  }).addTo(map);
+
+  setTileSource('osm');
+  map.on('move zoom moveend zoomend', updateSelectionAndStats);
+  updateSelectionAndStats();
+}
+
+function updateSelectionAndStats() {
+  if (!selectionRect) return;
+  const aspectKey = document.getElementById('aspect-ratio').value;
+  const targetRatio = ASPECT_RATIOS[aspectKey];
+  const sizeScale  = parseInt(document.getElementById('sel-size').value) / 100;
+  const offsetXFrac = parseInt(document.getElementById('sel-offset-x').value) / 100;
+  const offsetYFrac = parseInt(document.getElementById('sel-offset-y').value) / 100;
+  const exportBounds = fitAspectRatio(map.getBounds(), targetRatio, sizeScale, offsetXFrac, offsetYFrac);
+  selectionRect.setBounds(exportBounds);
+  updateStats();
+}
+const getExportBounds = () => selectionRect.getBounds();
+
+function updateStats() {
+  if (!selectionRect) return;
+  const bounds = getExportBounds();
+  const zoom = parseInt(document.getElementById('export-zoom').value);
+  const dpi = parseInt(document.getElementById('dpi').value);
+  const src = TILE_SOURCES[currentSourceKey];
+  const r = computeTileRange(bounds, zoom);
+
+  const pxW = r.cols * 256, pxH = r.rows * 256;
+  const mmW = pxW / dpi * 25.4, mmH = pxH / dpi * 25.4;
+  const tileMultiplier = src.overlayUrl ? 2 : 1;
+  const totalRequests = r.count * tileMultiplier;
+  const estSec = Math.ceil(totalRequests / 2 * 0.4);
+
+  const tileClass = totalRequests > 2000 ? 'danger' : totalRequests > 500 ? 'warn' : '';
+  const sizeClass = (pxW > 16000 || pxH > 16000) ? 'danger' : (pxW > 8000 || pxH > 8000) ? 'warn' : '';
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat ${tileClass}">
+      <div class="k">${t('stats.tiles')}</div>
+      <div class="v">${totalRequests.toLocaleString()}</div>
+    </div>
+    <div class="stat ${sizeClass}">
+      <div class="k">${t('stats.size')}</div>
+      <div class="v">${pxW}×${pxH}</div>
+    </div>
+    <div class="stat">
+      <div class="k">${t('stats.paper')}</div>
+      <div class="v">${mmW.toFixed(0)}×${mmH.toFixed(0)} mm</div>
+    </div>
+    <div class="stat">
+      <div class="k">${t('stats.time')}</div>
+      <div class="v">~${estSec < 60 ? estSec + 's' : Math.round(estSec/60) + ' min'}</div>
+    </div>
+  `;
+
+  const btn = document.getElementById('export-btn');
+  const reason = document.getElementById('disable-reason');
+  let disableMsg = null;
+  if (totalRequests > 3000) disableMsg = t('status.tooManyTiles');
+  else if (pxW > 20000 || pxH > 20000) disableMsg = t('status.canvasTooLarge');
+  btn.disabled = !!disableMsg;
+  reason.style.display = disableMsg ? 'block' : 'none';
+  reason.textContent = disableMsg || '';
+}
+
+// ── Geocoding ───────────────────────────────────────────────
+async function geocode(q) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
+  const res = await fetch(url, { headers: { 'Accept-Language': lang } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const results = await res.json();
+  if (!results.length) throw new Error(t('status.searchFail'));
+  return results[0];
+}
+document.getElementById('search-btn').addEventListener('click', async () => {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  setStatus(t('status.searching'), 'working');
+  try {
+    const r = await geocode(q);
+    if (r.boundingbox) {
+      const bb = r.boundingbox.map(parseFloat);
+      map.fitBounds([[bb[0], bb[2]], [bb[1], bb[3]]]);
+    } else {
+      map.setView([parseFloat(r.lat), parseFloat(r.lon)], 14);
+    }
+    const gr = document.getElementById('geocode-result');
+    gr.textContent = '📍 ' + r.display_name;
+    gr.classList.add('visible');
+    setTimeout(() => gr.classList.remove('visible'), 5000);
+    const cityField = document.getElementById('name-city');
+    if (!cityField.value.trim()) {
+      cityField.value = q.split(',')[0].toLowerCase().replace(/[^a-z0-9äöüß-]/g, '-');
+    }
+    setStatus('');
+  } catch (err) {
+    setStatus(t('status.searchFail') + ': ' + err.message, 'error');
+    console.error(err);
+  }
+});
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('search-btn').click();
+});
+document.getElementById('tile-source').addEventListener('change', e => setTileSource(e.target.value));
+document.getElementById('export-zoom').addEventListener('change', updateStats);
+document.getElementById('dpi').addEventListener('change', updateStats);
+document.getElementById('aspect-ratio').addEventListener('change', updateSelectionAndStats);
+document.getElementById('export-format').addEventListener('change', updateStats);
+
+['sel-size', 'sel-offset-x', 'sel-offset-y'].forEach(id => {
+  const input = document.getElementById(id);
+  const label = document.getElementById(id + '-val');
+  input.addEventListener('input', () => {
+    const v = parseInt(input.value);
+    label.textContent = (v > 0 && id !== 'sel-size' ? '+' : '') + v + '%';
+    updateSelectionAndStats();
+  });
+});
+
+function setStatus(msg, cls = '') {
+  const s = document.getElementById('status');
+  s.textContent = msg;
+  s.className = cls;
+}
+function setProgress(frac) {
+  const wrap = document.getElementById('progress-wrap');
+  const bar  = document.getElementById('progress-bar');
+  wrap.style.display = frac === null ? 'none' : 'block';
+  if (frac !== null) bar.style.width = Math.round(frac * 100) + '%';
+}
+
+// ── Tile loading ───────────────────────────────────────────
+function loadTile(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const to = setTimeout(() => reject(new Error('Timeout')), 20000);
+    img.onload  = () => { clearTimeout(to); resolve(img); };
+    img.onerror = () => { clearTimeout(to); reject(new Error('Load error')); };
+    img.src = url;
+  });
+}
+async function loadTileWithRetry(url, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try { return await loadTile(url); }
+    catch (e) { last = e; await new Promise(r => setTimeout(r, 500 * (i+1))); }
+  }
+  throw last;
+}
+
+async function downloadTilesToCanvas(bounds, zoom, urlTemplate, onProgress, initialDone = 0, totalOverall = null) {
+  const r = computeTileRange(bounds, zoom);
+  const canvas = document.createElement('canvas');
+  canvas.width = r.cols * 256;
+  canvas.height = r.rows * 256;
+  const ctx = canvas.getContext('2d');
+  const tiles = [];
+  for (let y = r.yMin; y <= r.yMax; y++)
+    for (let x = r.xMin; x <= r.xMax; x++) tiles.push({ x, y, z: zoom });
+
+  const CONCURRENT = 2;
+  let done = 0, failed = 0, idx = 0;
+  const total = totalOverall || tiles.length;
+
+  async function worker() {
+    while (idx < tiles.length) {
+      const tl = tiles[idx++];
+      const url = urlTemplate.replace('{z}', tl.z).replace('{x}', tl.x).replace('{y}', tl.y);
+      try {
+        const img = await loadTileWithRetry(url);
+        ctx.drawImage(img, (tl.x - r.xMin) * 256, (tl.y - r.yMin) * 256);
+      } catch (e) {
+        console.warn('Tile failed', tl, url, e);
+        failed++;
+      }
+      done++;
+      onProgress(initialDone + done, total, failed);
+    }
+  }
+  const workers = [];
+  for (let i = 0; i < CONCURRENT; i++) workers.push(worker());
+  await Promise.all(workers);
+  return { canvas, tileRange: r, failed, loaded: done };
+}
+
+function cropCanvasToBounds(canvas, tileRange, bounds, zoom) {
+  const xMinPx = (lonToTileX(bounds.getWest(), zoom) - tileRange.xMin) * 256;
+  const xMaxPx = (lonToTileX(bounds.getEast(), zoom) - tileRange.xMin) * 256;
+  const yMinPx = (latToTileY(bounds.getNorth(), zoom) - tileRange.yMin) * 256;
+  const yMaxPx = (latToTileY(bounds.getSouth(), zoom) - tileRange.yMin) * 256;
+  const cropW = Math.round(xMaxPx - xMinPx), cropH = Math.round(yMaxPx - yMinPx);
+  const out = document.createElement('canvas');
+  out.width = cropW; out.height = cropH;
+  out.getContext('2d').drawImage(canvas, Math.round(xMinPx), Math.round(yMinPx), cropW, cropH, 0, 0, cropW, cropH);
+  return out;
+}
+
+// ── Overlay (reference map) ─────────────────────────────────
+let refOverlay = null, nwPin = null, sePin = null, refOpacity = 0.6;
+
+function setOverlayFilename(msg) { document.getElementById('overlay-filename').textContent = msg; }
+
+async function fileToImageSrc(file) {
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (isPdf) {
+    setOverlayFilename('⏳ ' + t('overlay.rendering'));
+    const bytes = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const page = await pdf.getPage(1);
+    const vp1 = page.getViewport({ scale: 1 });
+    const scale = Math.min(3000 / Math.max(vp1.width, vp1.height), 2);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    setRefAspectRatio(vp1.width, vp1.height);
+    return canvas.toDataURL('image/png');
+  }
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('File read error'));
+    r.readAsDataURL(file);
+  });
+  await new Promise(res => {
+    const img = new Image();
+    img.onload = () => { setRefAspectRatio(img.naturalWidth, img.naturalHeight); res(); };
+    img.src = dataUrl;
+  });
+  return dataUrl;
+}
+
+function setRefAspectRatio(w, h) {
+  const ratio = w / h;
+  ASPECT_RATIOS['from-ref'] = ratio;
+  const opt = document.getElementById('from-ref-option');
+  opt.disabled = false;
+  opt.textContent = `${t('aspect.fromRefLoaded')} (${w}×${h})`;
+  document.getElementById('aspect-ratio').value = 'from-ref';
+  updateSelectionAndStats();
+}
+
+function removeOverlay() {
+  if (refOverlay) { map.removeLayer(refOverlay); refOverlay = null; }
+  if (nwPin) map.removeLayer(nwPin);
+  if (sePin) map.removeLayer(sePin);
+  nwPin = null; sePin = null;
+  ASPECT_RATIOS['from-ref'] = null;
+  const opt = document.getElementById('from-ref-option');
+  opt.disabled = true;
+  opt.textContent = t('aspect.fromRef');
+  const sel = document.getElementById('aspect-ratio');
+  if (sel.value === 'from-ref') { sel.value = 'a3-landscape'; updateSelectionAndStats(); }
+  document.getElementById('overlay-fit-btn').disabled = true;
+  document.getElementById('overlay-remove-btn').disabled = true;
+  document.getElementById('overlay-file').value = '';
+  setOverlayFilename('');
+}
+
+function placeOverlay(imageSrc, bounds) {
+  if (refOverlay) map.removeLayer(refOverlay);
+  if (nwPin) map.removeLayer(nwPin);
+  if (sePin) map.removeLayer(sePin);
+  refOverlay = L.imageOverlay(imageSrc, bounds, { opacity: refOpacity, interactive: false, pane: 'overlayPane' }).addTo(map);
+  const pinIcon = L.divIcon({ className: 'corner-pin', iconSize: [18, 18], iconAnchor: [9, 9] });
+  nwPin = L.marker([bounds.getNorth(), bounds.getWest()], { draggable: true, icon: pinIcon, zIndexOffset: 1000 }).addTo(map);
+  sePin = L.marker([bounds.getSouth(), bounds.getEast()], { draggable: true, icon: pinIcon, zIndexOffset: 1000 }).addTo(map);
+  const update = () => {
+    const nw = nwPin.getLatLng(), se = sePin.getLatLng();
+    const north = Math.max(nw.lat, se.lat), south = Math.min(nw.lat, se.lat);
+    const west  = Math.min(nw.lng, se.lng), east  = Math.max(nw.lng, se.lng);
+    refOverlay.setBounds([[south, west], [north, east]]);
+  };
+  nwPin.on('drag', update); sePin.on('drag', update);
+  document.getElementById('overlay-fit-btn').disabled = false;
+  document.getElementById('overlay-remove-btn').disabled = false;
+}
+
+document.getElementById('overlay-file').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const src = await fileToImageSrc(file);
+    placeOverlay(src, getExportBounds());
+    setOverlayFilename('✓ ' + file.name);
+  } catch (err) {
+    setOverlayFilename('⚠ ' + err.message);
+    console.error(err);
+  }
+});
+// Drag & drop
+const dropZone = document.getElementById('overlay-file-label');
+['dragover', 'dragenter'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.style.background = 'var(--accent-bg)';
+}));
+['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.style.background = '';
+}));
+dropZone.addEventListener('drop', ev => {
+  ev.preventDefault();
+  if (ev.dataTransfer.files[0]) {
+    document.getElementById('overlay-file').files = ev.dataTransfer.files;
+    document.getElementById('overlay-file').dispatchEvent(new Event('change'));
+  }
+});
+
+document.getElementById('opacity-slider').addEventListener('input', e => {
+  refOpacity = parseInt(e.target.value) / 100;
+  document.getElementById('opacity-val').textContent = e.target.value + '%';
+  if (refOverlay) refOverlay.setOpacity(refOpacity);
+});
+
+document.getElementById('overlay-fit-btn').addEventListener('click', () => {
+  if (!refOverlay) return;
+  const b = getExportBounds();
+  refOverlay.setBounds(b);
+  nwPin.setLatLng([b.getNorth(), b.getWest()]);
+  sePin.setLatLng([b.getSouth(), b.getEast()]);
+  toast(t('overlay.fitted'), 'success');
+});
+document.getElementById('overlay-remove-btn').addEventListener('click', removeOverlay);
+
+// ── Export ──────────────────────────────────────────────────
+async function doExport() {
+  const bounds = getExportBounds();
+  const zoom = parseInt(document.getElementById('export-zoom').value);
+  const dpi = parseInt(document.getElementById('dpi').value);
+  const format = document.getElementById('export-format').value;
+  const src = TILE_SOURCES[currentSourceKey];
+
+  const baseCity = document.getElementById('name-city').value.trim() || 'map';
+  const year = document.getElementById('name-year').value.trim();
+  const suffix = currentSourceKey.startsWith('esri-sat') ? '_sat' : '';
+  const baseName = `${baseCity}${year ? '_' + year : ''}_z${zoom}${suffix}`.replace(/[^a-zA-Z0-9_\-äöüÄÖÜß]/g, '_');
+
+  const r = computeTileRange(bounds, zoom);
+  const totalTiles = r.count * (src.overlayUrl ? 2 : 1);
+
+  setStatus('⏳ ' + t('status.loadingTiles') + '…', 'working');
+  setProgress(0);
+  const btn = document.getElementById('export-btn');
+  btn.disabled = true;
+
+  try {
+    const base = await downloadTilesToCanvas(bounds, zoom, src.url, (done, total, failed) => {
+      setProgress(done / total);
+      setStatus(`${t('status.loadingTiles')}: ${done}/${total}${failed ? ` · ${failed} ${t('status.tileFail')}` : ''}`, 'working');
+    }, 0, totalTiles);
+
+    let finalCanvas = base.canvas;
+    let totalFailed = base.failed;
+
+    if (src.overlayUrl) {
+      const overlay = await downloadTilesToCanvas(bounds, zoom, src.overlayUrl, (done, total, failed) => {
+        setProgress(done / total);
+        setStatus(`${t('status.loadingTiles')}: ${done}/${total}${failed ? ` · ${failed} ${t('status.tileFail')}` : ''}`, 'working');
+      }, r.count, totalTiles);
+      base.canvas.getContext('2d').drawImage(overlay.canvas, 0, 0);
+      totalFailed += overlay.failed;
+    }
+
+    finalCanvas = cropCanvasToBounds(finalCanvas, base.tileRange, bounds, zoom);
+
+    setStatus('⏳ ' + t('status.encodingImage'), 'working');
+    await new Promise(r => setTimeout(r, 50));
+
+    const [mime, quality, ext] = {
+      'pdf':     ['image/png', undefined, 'pdf'],
+      'png':     ['image/png', undefined, 'png'],
+      'jpeg-95': ['image/jpeg', 0.95, 'jpg'],
+      'jpeg-85': ['image/jpeg', 0.85, 'jpg'],
+      'webp-95': ['image/webp', 0.95, 'webp'],
+      'webp-85': ['image/webp', 0.85, 'webp']
+    }[format];
+
+    const blob = await new Promise(res => finalCanvas.toBlob(res, mime, quality));
+    if (!blob) throw new Error('Canvas encode failed');
+
+    let downloadBlob, filename;
+    if (format === 'pdf') {
+      setStatus('⏳ ' + t('status.creatingPDF'), 'working');
+      await new Promise(r => setTimeout(r, 50));
+      const { PDFDocument } = PDFLib;
+      const pdfDoc = await PDFDocument.create();
+      const pngImg = await pdfDoc.embedPng(new Uint8Array(await blob.arrayBuffer()));
+      const pageWpt = finalCanvas.width / dpi * 72;
+      const pageHpt = finalCanvas.height / dpi * 72;
+      const page = pdfDoc.addPage([pageWpt, pageHpt]);
+      page.drawImage(pngImg, { x: 0, y: 0, width: pageWpt, height: pageHpt });
+      pdfDoc.setTitle(baseCity + (year ? ' ' + year : ''));
+      pdfDoc.setSubject(`${src.attribution} · zoom ${zoom}`);
+      pdfDoc.setProducer('Map Export · github.com/…');
+      const pdfBytes = await pdfDoc.save();
+      downloadBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+      filename = baseName + '.pdf';
+    } else {
+      downloadBlob = blob;
+      filename = baseName + '.' + ext;
+    }
+
+    const url = URL.createObjectURL(downloadBlob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const mb = (downloadBlob.size / 1024 / 1024).toFixed(1);
+    setStatus(`✓ ${filename} · ${mb} MB${totalFailed ? ` · ⚠ ${totalFailed} ${t('status.tileFail')}` : ''}`, 'done');
+    toast(t('toast.exportDone'), 'success');
+    setProgress(null);
+  } catch (err) {
+    console.error(err);
+    setStatus(t('status.failed') + ': ' + err.message, 'error');
+    toast(t('toast.exportFail') + err.message, 'error');
+    setProgress(null);
+  } finally {
+    updateStats();
+  }
+}
+document.getElementById('export-btn').addEventListener('click', doExport);
+
+// Mobile sidebar toggle
+document.getElementById('toggle-sidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+// Init
+applyI18n();
+initMap();
+</script>
+</body>
+</html>
