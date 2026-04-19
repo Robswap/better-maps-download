@@ -556,8 +556,14 @@
   }
 
   /* Prevent text selection on UI chrome (feels more native on touch) */
-  .header, .sidebar, .search-overlay, .toast { -webkit-user-select: none; user-select: none; }
-  input, textarea, select { -webkit-user-select: auto; user-select: auto; }
+  .header, .search-overlay, .toast { -webkit-user-select: none; user-select: none; }
+  /* IMPORTANT: sidebar needs full touch support, don't disable user-select there */
+  input, textarea, select, button { -webkit-user-select: auto; user-select: auto; }
+
+  /* Ensure all interactive elements work properly on touch devices */
+  button, select, input, a, .btn, .type-option {
+    touch-action: manipulation;
+  }
 
   /* Disable iOS tap highlight */
   button, a, .btn, input[type="range"] { -webkit-tap-highlight-color: transparent; }
@@ -821,11 +827,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 // ── Theme (light/dark) ──────────────────────────────────────
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('theme', theme);
+  try { localStorage.setItem('theme', theme); } catch(e) {}
 }
 (function initTheme() {
-  const saved = localStorage.getItem('theme');
-  const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  let saved = null;
+  try { saved = localStorage.getItem('theme'); } catch(e) {}
+  let systemDark = false;
+  try { systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch(e) {}
   applyTheme(saved || (systemDark ? 'dark' : 'light'));
 })();
 document.getElementById('theme-toggle').addEventListener('click', () => {
@@ -958,7 +966,8 @@ const I18N = {
     'tiles': 'Tiles'
   }
 };
-let lang = localStorage.getItem('lang') || 'en';
+let lang = 'en';
+try { lang = localStorage.getItem('lang') || 'en'; } catch(e) {}
 function t(key) { return I18N[lang][key] ?? key; }
 function applyI18n() {
   document.documentElement.lang = lang;
@@ -971,7 +980,7 @@ function applyI18n() {
 document.querySelectorAll('.lang-toggle button').forEach(b => {
   b.addEventListener('click', () => {
     lang = b.dataset.lang;
-    localStorage.setItem('lang', lang);
+    try { localStorage.setItem('lang', lang); } catch(e) {}
     applyI18n();
   });
 });
@@ -1206,6 +1215,7 @@ function updateStats() {
   }
 
   btn.disabled = false; // never block — let user decide
+  btn.dataset.everEnabled = '1';
   reason.style.display = warnMsg ? 'block' : 'none';
   reason.textContent = warnMsg || '';
   reason.className = 'warning'; // soft styling (not red)
@@ -1596,9 +1606,34 @@ exportBtnForSidebar.addEventListener('click', () => {
   if (window.innerWidth <= 768) setSidebar(false);
 });
 
-// Init
-applyI18n();
-initMap();
+// ── Bulletproof init with safety net ─────────────────────────
+function safetyNet() {
+  // Ensure export button is interactive even if updateStats never ran
+  const btn = document.getElementById('export-btn');
+  if (btn && !btn.dataset.everEnabled) {
+    btn.disabled = false;
+  }
+  // Ensure all selects in sidebar are interactive
+  document.querySelectorAll('aside.sidebar select, aside.sidebar input, aside.sidebar button').forEach(el => {
+    el.style.pointerEvents = 'auto';
+  });
+}
+
+try {
+  applyI18n();
+  initMap();
+  safetyNet();
+} catch (err) {
+  console.error('Init error:', err);
+  // Even if init crashes, at least make the UI usable
+  safetyNet();
+  try { initMap(); } catch(e) { console.error('Map retry failed:', e); }
+}
+
+// Additional safety net: after everything else, make sure button isn't stuck disabled
+window.addEventListener('load', safetyNet);
+setTimeout(safetyNet, 500);
+setTimeout(safetyNet, 1500);
 </script>
 </body>
 </html>
