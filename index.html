@@ -93,7 +93,8 @@
     padding: 0 18px; height: var(--header-h);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0; z-index: 50;
+    flex-shrink: 0; z-index: 2000;
+    position: relative;
   }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand .logo { font-size: 22px; }
@@ -109,7 +110,7 @@
   /* Search overlay on top of map */
   .search-overlay {
     position: absolute; top: 12px; left: 12px; right: 12px;
-    z-index: 800;
+    z-index: 1500;
     display: flex; gap: 8px; align-items: center;
     max-width: 720px;
     pointer-events: none;
@@ -162,11 +163,28 @@
     box-shadow: var(--shadow);
     font-size: 12px;
     color: var(--text-2);
-    z-index: 800;
+    z-index: 1500;
     max-width: 600px;
     display: none;
   }
   .geocode-result.visible { display: block; }
+
+  /* Sidebar close button (only visible on mobile) */
+  .sidebar-close-row {
+    display: none;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+  .icon-btn {
+    background: transparent; border: none; cursor: pointer;
+    padding: 8px; border-radius: 8px;
+    color: var(--text-2);
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s;
+  }
+  .icon-btn:hover { background: var(--surface-2); }
 
   /* ── Sidebar ───────────────────────────────────────────── */
   aside.sidebar {
@@ -427,7 +445,7 @@
       gap: 6px;
       position: sticky;
       top: 0;
-      z-index: 1100;
+      z-index: 2000;
       flex-shrink: 0;
     }
     .brand .sub { display: none; }
@@ -442,16 +460,17 @@
       left: 8px !important;
       right: 8px !important;
       max-width: none !important;
-      z-index: 900;
+      z-index: 1500;
     }
 
-    /* Sidebar as slide-in panel */
+    /* Sidebar as slide-in panel — TOPMOST layer when open */
     .workspace { position: relative; }
+    .sidebar-close-row { display: flex; }
     aside.sidebar {
       width: min(380px, 90vw);
       position: fixed;
-      right: 0; top: var(--header-h); bottom: 0;
-      z-index: 1000;
+      right: 0; top: 0; bottom: 0;
+      z-index: 3000;
       transform: translateX(100%);
       transition: transform .28s cubic-bezier(.2,.8,.2,1);
       border-left: 1px solid var(--border);
@@ -469,12 +488,12 @@
     /* Backdrop visible on mobile (fade controlled by .visible) */
     .sidebar-backdrop { display: block; }
 
-    /* Backdrop */
+    /* Backdrop covers everything including header when sidebar is open */
     .sidebar-backdrop {
       position: fixed;
-      inset: var(--header-h) 0 0 0;
-      background: rgba(0,0,0,0.4);
-      z-index: 999;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 2500;
       opacity: 0;
       pointer-events: none;
       transition: opacity .25s;
@@ -626,6 +645,13 @@
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
+
+      <!-- Mobile-only close button -->
+      <div class="sidebar-close-row">
+        <button class="icon-btn" id="sidebar-close" aria-label="Close menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
 
       <!-- Map style -->
       <section class="panel">
@@ -1594,6 +1620,7 @@ sidebarToggle.addEventListener('click', () => {
   setSidebar(!sidebar.classList.contains('open'));
 });
 backdrop.addEventListener('click', () => setSidebar(false));
+document.getElementById('sidebar-close').addEventListener('click', () => setSidebar(false));
 
 // Close sidebar with Escape
 document.addEventListener('keydown', e => {
