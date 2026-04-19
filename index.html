@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="description" content="Export high-resolution maps from OpenStreetMap and satellite imagery. Free, open-source, runs entirely in your browser.">
-<title>High-resolution map downloads</title>
+<title>Map Export — High-resolution map downloads</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E🗺%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
@@ -691,6 +691,14 @@
             <optgroup label="Satellite" data-i18n-label="style.group.satellite">
               <option value="esri-sat">🛰 Esri World Imagery</option>
               <option value="esri-sat-labels">🛰 Esri Satellite + Labels</option>
+              <option value="google-sat">🛰 Google Satellite</option>
+              <option value="google-hybrid">🛰 Google Hybrid (sat + labels)</option>
+              <option value="google-terrain">🛰 Google Terrain</option>
+              <option value="bing-sat">🛰 Bing Maps Aerial</option>
+              <option value="usgs-imagery">🛰 USGS Imagery (USA)</option>
+              <option value="usgs-topo">🛰 USGS Topo (USA)</option>
+              <option value="sentinel2">🛰 Sentinel-2 Cloudless 2023</option>
+              <option value="nasa-gibs">📅 NASA GIBS (Time slider)</option>
             </optgroup>
             <optgroup label="Minimal / Canvas" data-i18n-label="style.group.minimal">
               <option value="esri-gray">◻ Esri Light Gray Canvas</option>
@@ -708,6 +716,41 @@
               <option value="seamarks">⚓ Sea charts (OpenSeaMap)</option>
             </optgroup>
           </select>
+        </div>
+      </section>
+
+      <!-- Time slider (only for time-series sources like NASA GIBS) -->
+      <section class="panel" id="time-panel" style="display:none;">
+        <h2 class="panel-title" data-i18n="panel.time">Time period</h2>
+        <div class="field slider-field">
+          <label><span data-i18n="field.year">Year</span><span id="time-year-val">2024</span></label>
+          <input type="range" id="time-year" min="2000" max="2025" value="2024" step="1">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label data-i18n="field.month">Month</label>
+            <select id="time-month">
+              <option value="01">Jan</option><option value="02">Feb</option>
+              <option value="03">Mar</option><option value="04">Apr</option>
+              <option value="05">May</option><option value="06" selected>Jun</option>
+              <option value="07">Jul</option><option value="08">Aug</option>
+              <option value="09">Sep</option><option value="10">Oct</option>
+              <option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+          </div>
+          <div class="field">
+            <label data-i18n="field.dataset">Dataset</label>
+            <select id="time-dataset">
+              <option value="MODIS_Terra_CorrectedReflectance_TrueColor" selected>MODIS Terra (True Color)</option>
+              <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua (True Color)</option>
+              <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">VIIRS SNPP (True Color)</option>
+              <option value="MODIS_Terra_CorrectedReflectance_Bands721">MODIS Terra (False Color 7-2-1)</option>
+              <option value="MODIS_Terra_CorrectedReflectance_Bands367">MODIS Terra (False Color 3-6-7)</option>
+            </select>
+          </div>
+        </div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;" data-i18n="time.hint">
+          Global satellite imagery since 2000. Updated daily.
         </div>
       </section>
 
@@ -892,6 +935,10 @@ const I18N = {
     'style.group.infra': 'Infrastructure / Education',
     'panel.style': 'Map style',
     'panel.export': 'Export',
+    'panel.time': 'Time period (satellite imagery)',
+    'field.month': 'Month',
+    'field.dataset': 'Dataset',
+    'time.hint': 'Global satellite imagery since 2000. Updated daily by NASA.',
     'panel.selection': 'Selection area',
     'panel.reference': 'Reference overlay',
     'field.aspect': 'Aspect ratio',
@@ -953,6 +1000,10 @@ const I18N = {
     'style.group.infra': 'Infrastruktur / Erdkunde',
     'panel.style': 'Karten-Stil',
     'panel.export': 'Export',
+    'panel.time': 'Zeitraum (Satellitenbilder)',
+    'field.month': 'Monat',
+    'field.dataset': 'Datensatz',
+    'time.hint': 'Globale Satellitenbilder seit 2000. Täglich von NASA aktualisiert.',
     'panel.selection': 'Auswahl-Bereich',
     'panel.reference': 'Referenzkarte',
     'field.aspect': 'Seitenverhältnis',
@@ -1055,6 +1106,16 @@ const TILE_SOURCES = {
   // ── Satellite ─────────────────────────────────────────────
   'esri-sat':        { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, attribution: 'Tiles © Esri · Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community' },
   'esri-sat-labels': { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlayUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, attribution: 'Tiles © Esri · Labels © Esri' },
+  'google-sat':      { url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20, attribution: '© Google Satellite' },
+  'google-hybrid':   { url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', maxZoom: 20, attribution: '© Google Hybrid' },
+  'google-terrain':  { url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', maxZoom: 20, attribution: '© Google Terrain' },
+  'bing-sat':        { url: 'https://ecn.t{s}.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1', maxZoom: 19, attribution: '© Microsoft · Bing Maps', subdomains: '0123', quadkey: true },
+  'usgs-imagery':    { url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', maxZoom: 16, attribution: 'Tiles courtesy of the U.S. Geological Survey (USA only)' },
+  'usgs-topo':       { url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', maxZoom: 16, attribution: 'Tiles courtesy of the U.S. Geological Survey (USA only)' },
+  'sentinel2':       { url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/g/{z}/{y}/{x}.jpg', maxZoom: 15, attribution: 'Sentinel-2 cloudless 2023 by EOX IT Services GmbH' },
+
+  // ── Historical Imagery (NASA GIBS - year slider) ─────────
+  'nasa-gibs':       { isTimeSeries: true, maxZoom: 9, subdomains: 'abc', attribution: 'NASA EOSDIS GIBS · MODIS Terra Corrected Reflectance' },
 
   // ── Minimal / Canvas ──────────────────────────────────────
   'esri-gray':       { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', maxZoom: 16, attribution: 'Tiles © Esri · Source: Esri, DeLorme, NAVTEQ' },
@@ -1151,18 +1212,69 @@ let currentSourceKey = 'carto-voyager';
 function setTileSource(key) {
   currentSourceKey = key;
   const src = TILE_SOURCES[key];
+
   if (baseLayer) map.removeLayer(baseLayer);
   if (overlayLayer) { map.removeLayer(overlayLayer); overlayLayer = null; }
 
-  baseLayer = L.tileLayer(src.url, { maxZoom: src.maxZoom, maxNativeZoom: src.maxZoom, attribution: src.attribution, crossOrigin: 'anonymous' }).addTo(map);
+  // Show/hide time panel
+  document.getElementById('time-panel').style.display = src.isTimeSeries ? 'block' : 'none';
+
+  const url = resolveUrl(src);
+  const options = { maxZoom: src.maxZoom || 19, maxNativeZoom: src.maxZoom || 19, attribution: src.attribution, crossOrigin: 'anonymous' };
+  if (src.subdomains) options.subdomains = src.subdomains;
+
+  // Bing uses quadkey URLs — Leaflet doesn't natively support {q}, so use a custom layer class
+  if (src.quadkey) {
+    baseLayer = createQuadkeyLayer(url, options).addTo(map);
+  } else {
+    baseLayer = L.tileLayer(url, options).addTo(map);
+  }
+
   if (src.overlayUrl) {
     overlayLayer = L.tileLayer(src.overlayUrl, { maxZoom: src.maxZoom, maxNativeZoom: src.maxZoom, crossOrigin: 'anonymous' }).addTo(map);
   }
 
   const zoomSel = document.getElementById('export-zoom');
-  for (const opt of zoomSel.options) opt.disabled = parseInt(opt.value) > src.maxZoom;
-  if (parseInt(zoomSel.value) > src.maxZoom) zoomSel.value = src.maxZoom;
+  const maxZoom = src.maxZoom || 19;
+  for (const opt of zoomSel.options) opt.disabled = parseInt(opt.value) > maxZoom;
+  if (parseInt(zoomSel.value) > maxZoom) zoomSel.value = maxZoom;
   updateStats();
+}
+
+// Resolve URL for time-series sources
+function resolveUrl(src) {
+  if (src.isTimeSeries) {
+    const year = document.getElementById('time-year').value;
+    const month = document.getElementById('time-month').value;
+    const dataset = document.getElementById('time-dataset').value;
+    // NASA GIBS WMTS URL format – use day 15 of selected month (always available)
+    return `https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/${dataset}/default/${year}-${month}-15/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+  }
+  return src.url;
+}
+
+// Custom Leaflet layer for Bing Maps (uses quadkey instead of x/y/z)
+function tileToQuadKey(x, y, z) {
+  let qk = '';
+  for (let i = z; i > 0; i--) {
+    let digit = 0;
+    const mask = 1 << (i - 1);
+    if ((x & mask) !== 0) digit++;
+    if ((y & mask) !== 0) digit += 2;
+    qk += digit;
+  }
+  return qk;
+}
+function createQuadkeyLayer(urlTemplate, options) {
+  const QuadkeyLayer = L.TileLayer.extend({
+    getTileUrl: function(coords) {
+      const q = tileToQuadKey(coords.x, coords.y, coords.z);
+      const subs = this.options.subdomains;
+      const s = subs[Math.abs(coords.x + coords.y) % subs.length];
+      return this._url.replace('{q}', q).replace('{s}', s);
+    }
+  });
+  return new QuadkeyLayer(urlTemplate, options);
 }
 
 function initMap() {
@@ -1311,6 +1423,28 @@ document.getElementById('export-format').addEventListener('change', updateStats)
   });
 });
 
+// ── Time slider for NASA GIBS ───────────────────────────────
+function refreshTimeLayer() {
+  if (TILE_SOURCES[currentSourceKey]?.isTimeSeries) {
+    setTileSource(currentSourceKey);
+  }
+}
+document.getElementById('time-year').addEventListener('input', e => {
+  document.getElementById('time-year-val').textContent = e.target.value;
+  refreshTimeLayer();
+});
+document.getElementById('time-month').addEventListener('change', refreshTimeLayer);
+document.getElementById('time-dataset').addEventListener('change', refreshTimeLayer);
+
+// Set current year as max and default
+(function initTimeSlider() {
+  const thisYear = new Date().getFullYear();
+  const slider = document.getElementById('time-year');
+  slider.max = thisYear;
+  slider.value = thisYear - 1;
+  document.getElementById('time-year-val').textContent = slider.value;
+})();
+
 function setStatus(msg, cls = '') {
   const s = document.getElementById('status');
   s.textContent = msg;
@@ -1343,7 +1477,7 @@ async function loadTileWithRetry(url, tries = 3) {
   throw last;
 }
 
-async function downloadTilesToCanvas(bounds, zoom, urlTemplate, onProgress, initialDone = 0, totalOverall = null) {
+async function downloadTilesToCanvas(bounds, zoom, urlTemplate, onProgress, initialDone = 0, totalOverall = null, srcConfig = null) {
   const r = computeTileRange(bounds, zoom);
   const canvas = document.createElement('canvas');
   canvas.width = r.cols * 256;
@@ -1356,11 +1490,22 @@ async function downloadTilesToCanvas(bounds, zoom, urlTemplate, onProgress, init
   const CONCURRENT = 2;
   let done = 0, failed = 0, idx = 0;
   const total = totalOverall || tiles.length;
+  const subdomains = srcConfig?.subdomains || 'abc';
 
   async function worker() {
     while (idx < tiles.length) {
       const tl = tiles[idx++];
-      const url = urlTemplate.replace('{z}', tl.z).replace('{x}', tl.x).replace('{y}', tl.y);
+      let url;
+      if (srcConfig?.quadkey) {
+        const q = tileToQuadKey(tl.x, tl.y, tl.z);
+        const s = subdomains[Math.abs(tl.x + tl.y) % subdomains.length];
+        url = urlTemplate.replace('{q}', q).replace('{s}', s);
+      } else {
+        const s = subdomains[Math.abs(tl.x + tl.y) % subdomains.length];
+        url = urlTemplate
+          .replace('{z}', tl.z).replace('{x}', tl.x).replace('{y}', tl.y)
+          .replace('{s}', s);
+      }
       try {
         const img = await loadTileWithRetry(url);
         ctx.drawImage(img, (tl.x - r.xMin) * 256, (tl.y - r.yMin) * 256);
@@ -1536,10 +1681,11 @@ async function doExport() {
   btn.disabled = true;
 
   try {
-    const base = await downloadTilesToCanvas(bounds, zoom, src.url, (done, total, failed) => {
+    const exportUrl = resolveUrl(src);
+    const base = await downloadTilesToCanvas(bounds, zoom, exportUrl, (done, total, failed) => {
       setProgress(done / total);
       setStatus(`${t('status.loadingTiles')}: ${done}/${total}${failed ? ` · ${failed} ${t('status.tileFail')}` : ''}`, 'working');
-    }, 0, totalTiles);
+    }, 0, totalTiles, src);
 
     let finalCanvas = base.canvas;
     let totalFailed = base.failed;
