@@ -345,6 +345,9 @@
   #disable-reason {
     font-size: 12px; color: var(--danger); margin-top: 8px; display: none;
   }
+  #disable-reason.warning {
+    color: var(--warning);
+  }
 
   /* Corner pin for overlay */
   .corner-pin {
@@ -610,6 +613,10 @@
               <option value="esri-topo">⛰ Esri World Topographic</option>
               <option value="esri-physical">⛰ Esri Physical Map</option>
               <option value="esri-relief">⛰ Esri Shaded Relief</option>
+              <option value="esri-terrain">⛰ Esri World Terrain</option>
+              <option value="esri-hillshade">⛰ Esri Hillshade</option>
+              <option value="terrain-labels">⛰ Terrain + Labels</option>
+              <option value="hillshade-roads">⛰ Hillshade + Roads</option>
             </optgroup>
             <optgroup label="Satellite" data-i18n-label="style.group.satellite">
               <option value="esri-sat">🛰 Esri World Imagery</option>
@@ -622,6 +629,13 @@
             <optgroup label="Themed" data-i18n-label="style.group.themed">
               <option value="esri-natgeo">🌍 National Geographic</option>
               <option value="esri-ocean">🌊 Esri Ocean Basemap</option>
+            </optgroup>
+            <optgroup label="Infrastructure / Education" data-i18n-label="style.group.infra">
+              <option value="railway">🚂 Railway network (OpenRailwayMap)</option>
+              <option value="hiking">🥾 Hiking trails (Waymarked)</option>
+              <option value="cycling-routes">🚴 Cycling routes (Waymarked)</option>
+              <option value="mtb">🏔 MTB routes (Waymarked)</option>
+              <option value="seamarks">⚓ Sea charts (OpenSeaMap)</option>
             </optgroup>
           </select>
         </div>
@@ -803,6 +817,7 @@ const I18N = {
     'style.group.satellite': 'Satellite',
     'style.group.minimal': 'Minimal / Canvas',
     'style.group.themed': 'Themed',
+    'style.group.infra': 'Infrastructure / Education',
     'panel.style': 'Map style',
     'panel.export': 'Export',
     'panel.selection': 'Selection area',
@@ -845,7 +860,9 @@ const I18N = {
     'status.done': 'Done',
     'status.failed': 'Failed',
     'status.tooManyTiles': 'Too many tiles – reduce zoom or area.',
-    'status.canvasTooLarge': 'Output too large for browser canvas.',
+    'status.largeExport': 'Large export, may take a few minutes.',
+    'status.veryLargeExport': 'Very large export — risk of browser slowdown / crash. Consider lower zoom.',
+    'status.canvasTooLarge': 'Output may exceed browser canvas limits.',
     'status.tileFail': 'tiles failed',
     'toast.exportDone': 'Map exported successfully',
     'toast.exportFail': 'Export failed: ',
@@ -861,6 +878,7 @@ const I18N = {
     'style.group.satellite': 'Satellit',
     'style.group.minimal': 'Minimal / Canvas',
     'style.group.themed': 'Thematisch',
+    'style.group.infra': 'Infrastruktur / Erdkunde',
     'panel.style': 'Karten-Stil',
     'panel.export': 'Export',
     'panel.selection': 'Auswahl-Bereich',
@@ -903,7 +921,9 @@ const I18N = {
     'status.done': 'Fertig',
     'status.failed': 'Fehler',
     'status.tooManyTiles': 'Zu viele Tiles – Zoom reduzieren oder Bereich verkleinern.',
-    'status.canvasTooLarge': 'Ausgabe zu groß für Browser-Canvas.',
+    'status.largeExport': 'Großer Export, kann einige Minuten dauern.',
+    'status.veryLargeExport': 'Sehr großer Export — Browser könnte abstürzen. Geringeren Zoom erwägen.',
+    'status.canvasTooLarge': 'Ausgabe könnte Browser-Canvas-Limit überschreiten.',
     'status.tileFail': 'Tiles fehlgeschlagen',
     'toast.exportDone': 'Karte erfolgreich exportiert',
     'toast.exportFail': 'Export fehlgeschlagen: ',
@@ -970,6 +990,17 @@ const TILE_SOURCES = {
   // ── Themed ────────────────────────────────────────────────
   'esri-natgeo':     { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}', maxZoom: 16, attribution: 'Tiles © Esri · National Geographic, Esri, Garmin, HERE, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC' },
   'esri-ocean':      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', maxZoom: 13, attribution: 'Tiles © Esri · Sources: GEBCO, NOAA, CHS, OSU, UNH, CSUMB, NAVY, NGA, DeLorme, NAVTEQ' },
+  'esri-terrain':    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', maxZoom: 13, attribution: 'Tiles © Esri · Source: USGS, Esri, TANA, DeLorme, NPS' },
+  'esri-hillshade':  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', maxZoom: 16, attribution: 'Tiles © Esri · Source: Esri' },
+
+  // ── Infrastructure / Education (base + overlay) ──────────
+  'railway':    { url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', overlayUrl: 'https://a.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', maxZoom: 19, attribution: '© OpenRailwayMap · © OpenStreetMap · © CARTO' },
+  'hiking':     { url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', overlayUrl: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', maxZoom: 18, attribution: '© Waymarked Trails · © OpenStreetMap · © CARTO' },
+  'cycling-routes': { url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', overlayUrl: 'https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png', maxZoom: 18, attribution: '© Waymarked Trails · © OpenStreetMap · © CARTO' },
+  'mtb':        { url: 'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', overlayUrl: 'https://tile.waymarkedtrails.org/mtb/{z}/{x}/{y}.png', maxZoom: 18, attribution: '© Waymarked Trails · © OpenStreetMap · © CARTO' },
+  'seamarks':   { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', overlayUrl: 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', maxZoom: 13, attribution: '© OpenSeaMap · © Esri' },
+  'terrain-labels': { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', overlayUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', maxZoom: 13, attribution: 'Tiles © Esri · Source: USGS, Esri, TANA, DeLorme, NPS' },
+  'hillshade-roads': { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', overlayUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', maxZoom: 16, attribution: 'Tiles © Esri' },
 };
 
 // ── Tile math ───────────────────────────────────────────────
@@ -1134,12 +1165,22 @@ function updateStats() {
 
   const btn = document.getElementById('export-btn');
   const reason = document.getElementById('disable-reason');
-  let disableMsg = null;
-  if (totalRequests > 3000) disableMsg = t('status.tooManyTiles');
-  else if (pxW > 20000 || pxH > 20000) disableMsg = t('status.canvasTooLarge');
-  btn.disabled = !!disableMsg;
-  reason.style.display = disableMsg ? 'block' : 'none';
-  reason.textContent = disableMsg || '';
+
+  // Soft warnings only — user can still export at their own risk
+  let warnMsg = null;
+  if (totalRequests > 10000) {
+    warnMsg = `⚠️ ${totalRequests.toLocaleString()} ${t('tiles')} — ${t('status.veryLargeExport')}`;
+  } else if (totalRequests > 3000) {
+    warnMsg = `⚠️ ${totalRequests.toLocaleString()} ${t('tiles')} — ${t('status.largeExport')}`;
+  }
+  if (pxW > 32000 || pxH > 32000) {
+    warnMsg = (warnMsg ? warnMsg + ' · ' : '⚠️ ') + t('status.canvasTooLarge');
+  }
+
+  btn.disabled = false; // never block — let user decide
+  reason.style.display = warnMsg ? 'block' : 'none';
+  reason.textContent = warnMsg || '';
+  reason.className = 'warning'; // soft styling (not red)
 }
 
 // ── Geocoding ───────────────────────────────────────────────
